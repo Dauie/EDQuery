@@ -10,12 +10,17 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jroimartin/gocui"
 )
 
 const versionNum = "1/"
+
+/* I literally dont care. */
+const apiKey = "15a77f8df4b47582347aa83bb29f4245335a334a"
 
 const baseURL = "https://www.edsm.net/"
 
@@ -73,6 +78,7 @@ type CmdrCreditLog		struct {
 }
 
 type Item				struct {
+	Ntype				int `json:"type"`
 	Type				string `json:"type"`
 	Name				string `json:"name"`
 	Qty					int `json:"qty"`
@@ -136,9 +142,20 @@ var EDSMErrors = map[int]string {
 	207: "No rank stored",
 }
 
+func cmdrLastPositionRequest(cmdrName string, lastPos *CmdrLastPosition) error {
+	payload := url.Values{}
+	payload.Add("commanderName", cmdrName)
+	reqStr := logEndpoint + "get-position?" + payload.Encode()
+	if err := makeEDSMRequest(reqStr, lastPos); err != nil {
+		return err
+	}
+	return nil
+}
+
 func cmdrFlightLogRequest(cmdrName string, flightLog *CmdrFlightLog, g *gocui.Gui) error {
 	payload := url.Values{}
 	payload.Add("commanderName", cmdrName)
+	payload.Add("apiKey", apiKey)
 	reqStr := logEndpoint + "get-logs?" + payload.Encode()
 	if err := makeEDSMRequest(reqStr, flightLog); err != nil {
 		return err
@@ -146,14 +163,35 @@ func cmdrFlightLogRequest(cmdrName string, flightLog *CmdrFlightLog, g *gocui.Gu
 	if err := cmdrLastPositionRequest(cmdrName, &flightLog.LastPos); err != nil {
 		return err
 	}
+	if err := printFlightLog(flightLog, g); err != nil {
+		return err
+	}
 	return nil
 }
 
-func cmdrLastPositionRequest(cmdrName string, lastPos *CmdrLastPosition) error {
-	payload := url.Values{}
-	payload.Add("commanderName", cmdrName)
-	reqStr := logEndpoint + "get-position?" + payload.Encode()
-	if err := makeEDSMRequest(reqStr, lastPos); err != nil {
+func printFlightLog(log *CmdrFlightLog, g *gocui.Gui) error {
+	var out string
+
+	view, err := g.SetCurrentView("flightLog")
+	if err != nil {
+		return err
+	}
+	view.Clear()
+	if log.LastPos.Msgnum == 100 {
+		out = "Last seen: " + log.LastPos.System + "\n"
+	} else {
+		out = "Position unknown\n"
+	}
+	if log.Msgnum == 100 {
+		for _, v := range log.Logs {
+			dateTime := strings.Split(v.Date, " ")
+			out = out + v.System + " - " + dateTime[0] + "\n"
+		}
+	} else {
+		out = out + fmt.Sprintf("%s", EDSMErrors[log.Msgnum - 1])
+	}
+	buf := []byte(out)
+	if _, err := view.Write(buf); err != nil {
 		return err
 	}
 	return nil
@@ -171,7 +209,6 @@ func cmdrRankRequest(cmdrName string, rankLog *CmdrRankLog, g *gocui.Gui) error 
 	}
 	return nil
 }
-
 
 func printRank(rank CmdrRankLog, g *gocui.Gui) error {
 	var out string
@@ -192,6 +229,20 @@ func printRank(rank CmdrRankLog, g *gocui.Gui) error {
 	}
 	buf := []byte(out)
 	if _, err := view.Write(buf); err != nil {
+		return err
+	}
+	return nil
+}
+
+func cmdrCreditRequest(cmdrName string, creditLog *CmdrCreditLog, g *gocui.Gui) error {
+	payload := url.Values{}
+	payload.Add("commanderName", cmdrName)
+	payload.Add("apiKey", apiKey)
+	reqStr := cmdrEndpoint + "get-credits?" + payload.Encode()
+	if err := makeEDSMRequest(reqStr, creditLog); err != nil {
+		return err
+	}
+	if err := printCredits(*creditLog, g); err != nil {
 		return err
 	}
 	return nil
@@ -218,15 +269,75 @@ func printCredits(credits CmdrCreditLog, g *gocui.Gui) error {
 	return nil
 }
 
-
-func cmdrCreditRequest(cmdrName string, creditLog *CmdrCreditLog, g *gocui.Gui) error {
+func cmdrInvMatRequest(cmdrName string, matLog *CmdrInventoryLog) error {
 	payload := url.Values{}
 	payload.Add("commanderName", cmdrName)
-	reqStr := cmdrEndpoint + "get-credits?" + payload.Encode()
-	if err := makeEDSMRequest(reqStr, creditLog); err != nil {
+	payload.Add("apiKey", apiKey)
+	payload.Add("type", "materials")
+	reqStr := cmdrEndpoint + "get-materials?" + payload.Encode()
+	if err := makeEDSMRequest(reqStr, matLog); err != nil {
 		return err
 	}
-	if err := printCredits(*creditLog, g); err != nil {
+	return nil
+}
+
+func cmdrInvDataMatReqest(cmdrName string, dataMatLog *CmdrInventoryLog) error {
+	payload := url.Values{}
+	payload.Add("commanderName", cmdrName)
+	payload.Add("apiKey", apiKey)
+	payload.Add("type", "data")
+	reqStr := cmdrEndpoint + "get-materials?" + payload.Encode()
+	if err := makeEDSMRequest(reqStr, dataMatLog); err != nil {
+		return err
+	}
+	return nil
+}
+
+func cmdrInventoryRequest(cmdrName string, cmdrLog *CmdrLog, g *gocui.Gui) error {
+	if err := cmdrInvMatRequest(cmdrName, &cmdrLog.Materials); err != nil {
+		return err
+	}
+	if err := cmdrInvDataMatReqest(cmdrName, &cmdrLog.Data); err != nil {
+		return err
+	}
+	if err := printInventory(cmdrLog, g); err != nil {
+		return err
+	}
+	return nil
+}
+
+func printInventory(log *CmdrLog, g *gocui.Gui) error {
+	var out string
+
+	view, err := g.SetCurrentView("materials")
+	if err != nil {
+		return err
+	}
+	view.Clear()
+	if log.Materials.Msgnum == 100 {
+		for _, v := range log.Materials.Items {
+			out = out + v.Name + "\t x " + strconv.Itoa(v.Qty) + "\n"}
+	} else {
+		out = EDSMErrors[log.Materials.Msgnum] + "\n"
+	}
+	buf := []byte(out)
+	if _, err := view.Write(buf); err != nil {
+		return err
+	}
+
+	view, err = g.SetCurrentView("data")
+	if err != nil {
+		return err
+	}
+	view.Clear()
+	if log.Data.Msgnum == 100 {
+		for _, v := range log.Materials.Items {
+			out = out + v.Name + "\t x " + strconv.Itoa(v.Qty) + "\n"}
+	} else {
+		out = EDSMErrors[log.Materials.Msgnum] + "\n"
+	}
+	buf = []byte(out)
+	if _, err := view.Write(buf); err != nil {
 		return err
 	}
 	return nil
@@ -252,17 +363,6 @@ func makeEDSMRequest(request string, store interface{}) error {
 	return nil
 }
 
-func nextView(g *gocui.Gui, v *gocui.View) error {
-	if v == nil || v.Name() == "side" {
-		_, err := g.SetCurrentView("main")
-		return err
-	}
-	_, err := g.SetCurrentView("side")
-	return err
-}
-
-
-
 func queryCmdr(g *gocui.Gui, v *gocui.View) error {
 	var err error
 	var cmdr CmdrLog
@@ -282,10 +382,22 @@ func queryCmdr(g *gocui.Gui, v *gocui.View) error {
 	if err := cmdrFlightLogRequest(cmdr.Name, &cmdr.FlightLog, g); err != nil {
 		return err
 	}
+
+	if err := cmdrInventoryRequest(cmdr.Name, &cmdr, g); err != nil {
+		return err
+	}
 	_, _ = g.SetCurrentView("side")
 	return nil
 }
 
+func nextView(g *gocui.Gui, v *gocui.View) error {
+	if v == nil || v.Name() == "side" {
+		_, err := g.SetCurrentView("main")
+		return err
+	}
+	_, err := g.SetCurrentView("side")
+	return err
+}
 
 func quit(g *gocui.Gui, v *gocui.View) error {
 	_ = saveSide(g, v)
@@ -309,7 +421,7 @@ func keybindings(g *gocui.Gui) error {
 	return nil
 }
 
-func checkDeminsions(mY int, mX int) error {
+func checkDemintions(mY int, mX int) error {
 	if mY < 10 || mX < 10 {
 		return errors.New("not in bounds")
 	}
@@ -338,7 +450,7 @@ func saveSide(g *gocui.Gui, v *gocui.View) error {
 
 func sideView(g *gocui.Gui) error {
 	mX, mY := g.Size()
-	if err := checkDeminsions(mX, mY); err != nil {
+	if err := checkDemintions(mX, mY); err != nil {
 		return nil
 	}
 	view, err := g.SetView("side", 0, 0, mX / 5, mY)
@@ -369,7 +481,7 @@ func sideView(g *gocui.Gui) error {
 
 func rankView(g *gocui.Gui) error {
 	mX, mY := g.Size()
-	if err := checkDeminsions(mX, mY); err != nil {
+	if err := checkDemintions(mX, mY); err != nil {
 		return nil
 	}
 	view, err := g.SetView("rank", mX / 5 + 1, 1, (mX / 5) * 2, (mY / 10) * 3)
@@ -386,7 +498,7 @@ func rankView(g *gocui.Gui) error {
 
 func creditView(g *gocui.Gui) error {
 	mX, mY := g.Size()
-	if err := checkDeminsions(mX, mY); err != nil {
+	if err := checkDemintions(mX, mY); err != nil {
 		return nil
 	}
 	view, err := g.SetView("credits", mX / 5 + 1, (mY / 10) * 3 + 1, (mX / 5) * 2 , (mY / 10) * 6)
@@ -403,7 +515,7 @@ func creditView(g *gocui.Gui) error {
 
 func flightLogView(g *gocui.Gui) error {
 	mX, mY := g.Size()
-	if err := checkDeminsions(mX, mY); err != nil {
+	if err := checkDemintions(mX, mY); err != nil {
 		return nil
 	}
 	view, err := g.SetView("flightLog", mX / 5 + 1, (mY / 10) * 6 + 1, (mX / 5) * 2, mY)
@@ -419,7 +531,7 @@ func flightLogView(g *gocui.Gui) error {
 
 func inventoryView(g *gocui.Gui) error {
 	mX, mY := g.Size()
-	if err := checkDeminsions(mX, mY); err != nil {
+	if err := checkDemintions(mX, mY); err != nil {
 		return nil
 	}
 	materialXStart := (mX / 5) * 2 + 1
@@ -427,7 +539,7 @@ func inventoryView(g *gocui.Gui) error {
 	materialXEnd := materialXStart + (invWid / 2)
 	dataXStart := materialXEnd + 1
 	dataXEnd := mX - 1
-	if err := checkDeminsions(mX, mY); err != nil {
+	if err := checkDemintions(mX, mY); err != nil {
 		return nil
 	}
 	materialsView, err := g.SetView("materials", materialXStart, 1, materialXEnd, mY)
@@ -451,7 +563,7 @@ func inventoryView(g *gocui.Gui) error {
 
 func mainView(g *gocui.Gui) error {
 	mX, mY := g.Size()
-	if err := checkDeminsions(mX, mY); err != nil {
+	if err := checkDemintions(mX, mY); err != nil {
 		return nil
 	}
 	view, err := g.SetView("main", mX / 5, 0, mX, mY)
@@ -549,4 +661,3 @@ func main() {
 		log.Fatalln(err)
 	}
 }
-
