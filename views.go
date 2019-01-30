@@ -3,8 +3,6 @@ package main
 import (
 	"errors"
 	"github.com/jroimartin/gocui"
-	"io"
-	"io/ioutil"
 )
 
 func checkDimensions(mY int, mX int) error {
@@ -116,14 +114,12 @@ func sideView(g *gocui.Gui) error {
 		view.Highlight = true
 		view.SelBgColor = gocui.ColorGreen
 		view.SelFgColor = gocui.ColorBlack
-		buff, err := ioutil.ReadFile(CmdrList)
-		if err == io.EOF {
-			return nil
+
+		var cmdrList string
+		for k := range CmdrMap {
+			cmdrList = cmdrList + k + "\n"
 		}
-		if err != nil {
-			return err
-		}
-		_, err = view.Write(buff)
+		_, err = view.Write([]byte(cmdrList))
 		if err != nil {
 			return err
 		}

@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"github.com/jroimartin/gocui"
 	"io"
 	"log"
+	"os"
 )
 
 var (
@@ -61,6 +61,16 @@ func cursorUp(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
+func openCmdrListFile() (CmdrListFd *os.File) {
+	CmdrListFd, err := os.OpenFile(CmdrListPath, os.O_CREATE|os.O_WRONLY, 0755)
+	if err == io.EOF {
+		return nil
+	} else if err != nil {
+		log.Panicln(err)
+	}
+	return CmdrListFd
+}
+
 func getLine(g *gocui.Gui, v *gocui.View) error {
 	var l string
 	var err error
@@ -69,14 +79,27 @@ func getLine(g *gocui.Gui, v *gocui.View) error {
 	if l, err = v.Line(cy); err != nil {
 		l = ""
 	}
-
 	maxX, maxY := g.Size()
-	if v, err := g.SetView("msg", maxX/2-30, maxY/2, maxX/2+30, maxY/2+2); err != nil {
+	if editNameView, err := g.SetView("editCmdr", maxX/2-30, maxY/2, maxX/2+30, maxY/2+2); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		fmt.Fprintln(v, l)
-		if _, err := g.SetCurrentView("msg"); err != nil {
+		editNameView.Title = "Edit Commander Name"
+		editNameView.Editable = true
+		if _, err := editNameView.Write([]byte(l)); err != nil {
+			log.Panicln(err)
+		}
+	}
+	if editApiView, err := g.SetView("editApi", maxX/2-30, maxY/2, maxX/2+30, maxY/2+2); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		editApiView.Title = "Edit Commander API key"
+		editApiView.Editable = true
+		if _, err := editApiView.Write([]byte(CmdrMap[l])); err != nil {
+			log.Panicln(err)
+		}
+		if _, err := g.SetCurrentView("editCmdr"); err != nil {
 			return err
 		}
 	}
@@ -100,21 +123,21 @@ func queryCmdr(g *gocui.Gui, v *gocui.View) error {
 	_, cy := v.Cursor()
 	cmdr.Name, err = v.Line(cy)
 	if err != nil {
-		return err
+		log.Panicln(err)
 	}
 	if err := cmdrRankRequest(cmdr.Name, &cmdr.Rank, g); err != nil {
-		return err
+		log.Panicln(err)
 	}
 	if err := cmdrCreditRequest(cmdr.Name, &cmdr.Credits, g); err != nil {
-		return err
+		log.Panicln(err)
 	}
 
 	if err := cmdrFlightLogRequest(cmdr.Name, &cmdr.FlightLog, g); err != nil {
-		return err
+		log.Panicln(err)
 	}
 
 	if err := cmdrInventoryRequest(cmdr.Name, &cmdr, g); err != nil {
-		return err
+		log.Panicln(err)
 	}
 	_, _ = g.SetCurrentView("side")
 	return nil
@@ -126,21 +149,20 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 }
 
 func saveSide(g *gocui.Gui, v *gocui.View) error {
-	p := make([]byte, 4096)
-	v.Rewind()
-	for {
-		n, err := v.Read(p)
-		if n > 0 {
-			if _, err := CmdrListFd.Write(p[:n]); err != nil {
-				return err
-			}
-		}
-		if err == io.EOF {
-			break
-		}
+	var out string
+
+	cmdrListFd := openCmdrListFile()
+	defer func() {
+		err := cmdrListFd.Close()
 		if err != nil {
-			return err
+			log.Fatalln(err)
 		}
+	}()
+	for k, v := range CmdrMap {
+		out = out + k + " " + v + "\n"
+	}
+	if _, err := cmdrListFd.Write([]byte(out)); err != nil {
+		log.Panicln(err)
 	}
 	return nil
 }

@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/jroimartin/gocui"
@@ -25,13 +27,13 @@ const sysEndpoint = baseURL + "api-system-v" + versionNum
 
 const logEndpoint = baseURL + "api-logs-v" + versionNum
 
-var CmdrListFd *os.File
-
 var Client http.Client
 
-var CmdrList string
+var CmdrListPath string
 
-var CmdrPath string
+var AppDataPath string
+
+var CmdrMap = map[string]string{}
 
 var EDSMErrors = map[int]string {
 	201: "Missing CMDR/API key",
@@ -66,18 +68,30 @@ func initAppdata() error {
 	if !ok {
 		return errors.New("HOME env variable not set")
 	}
-	CmdrPath = homePath + "/.cmdr"
-	CmdrList = CmdrPath + "/cmdrlist"
-	_, err := os.Stat(CmdrPath)
+	AppDataPath = homePath + "/.cmdr"
+	CmdrListPath = AppDataPath + "/cmdrlist"
+	_, err := os.Stat(AppDataPath)
 	if os.IsNotExist(err) {
-		err = os.MkdirAll(CmdrPath, 0755)
+		err = os.MkdirAll(AppDataPath, 0755)
 		if err != nil {
-			return err
+			log.Fatalln(err)
 		}
 	}
-	CmdrListFd, err = os.OpenFile(CmdrList, os.O_CREATE|os.O_WRONLY, 0755)
+	file, _ := os.Open(CmdrListPath)
+	fscanner := bufio.NewScanner(file)
+	for fscanner.Scan() {
+		keyVal := strings.Split(fscanner.Text(), " ")
+		if len(keyVal) == 1 {
+			CmdrMap[keyVal[0]] = "No API key"
+		} else {
+			CmdrMap[keyVal[0]] = keyVal[1]
+		}
+	}
+	if err := fscanner.Err(); err != nil {
+		log.Panicln(err)
+	}
 	if err != nil {
-		return err
+		log.Panicln(err)
 	}
 	return nil
 }
@@ -101,12 +115,6 @@ func main() {
 	if err := initAppdata(); err != nil {
 		log.Fatalln("Error initializing application data.", err)
 	}
-	defer func() {
-		err := CmdrListFd.Close()
-		if err != nil {
-			log.Fatalln(err)
-		}
-	}()
 	gui, err := initGui()
 	defer gui.Close()
 	if err != nil {
@@ -116,11 +124,6 @@ func main() {
 	if err := keybindings(gui); err != nil {
 		log.Fatalln(err)
 	}
-	//if _, err := gui.SetCurrentView("side"); err != nil {
-	//	if err != gocui.ErrUnknownView {
-	//		log.Fatalln(err)
-	//	}
-	//}
 	if err := gui.MainLoop(); err != nil && err != gocui.ErrQuit {
 		log.Fatalln(err)
 	}

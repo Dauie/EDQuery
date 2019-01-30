@@ -95,8 +95,7 @@ func printInventory(log *CmdrLog, g *gocui.Gui) error {
 	} else {
 		data = EDSMErrors[log.Data.Msgnum] + "\n"
 	}
-	dataBuf := []byte(data)
-	if _, err := dataView.Write(dataBuf); err != nil {
+	if _, err := dataView.Write([]byte(data)); err != nil {
 		return err
 	}
 	return nil
@@ -120,8 +119,7 @@ func printRank(rank CmdrRankLog, g *gocui.Gui) error {
 	} else {
 		out = fmt.Sprintf("%s", EDSMErrors[rank.Msgnum - 1])
 	}
-	buf := []byte(out)
-	if _, err := view.Write(buf); err != nil {
+	if _, err := view.Write([]byte(out)); err != nil {
 		return err
 	}
 	return nil
