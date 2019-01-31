@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"github.com/jroimartin/gocui"
+	"log"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -19,7 +21,7 @@ func printCredits(credits CmdrCreditLog, g *gocui.Gui) error {
 		recentLog := credits.Credits[0]
 		out = fmt.Sprintf("%d © ", recentLog.Balance)
 	} else {
-		out = fmt.Sprintf("%s", EDSMErrors[credits.Msgnum - 1])
+		out = fmt.Sprintf("%s", EDSMErrorsG[credits.Msgnum - 1])
 	}
 	buf := []byte(out)
 	if _, err := view.Write(buf); err != nil {
@@ -47,7 +49,7 @@ func printFlightLog(log *CmdrFlightLog, g *gocui.Gui) error {
 			out = out + v.System + " - " + dateTime[0] + "\n"
 		}
 	} else {
-		out = out + fmt.Sprintf("%s", EDSMErrors[log.Msgnum - 1])
+		out = out + fmt.Sprintf("%s", EDSMErrorsG[log.Msgnum - 1])
 	}
 	buf := []byte(out)
 	if _, err := view.Write(buf); err != nil {
@@ -74,7 +76,7 @@ func printInventory(log *CmdrLog, g *gocui.Gui) error {
 			}
 		}
 	} else {
-		materials = EDSMErrors[log.Materials.Msgnum] + "\n"
+		materials = EDSMErrorsG[log.Materials.Msgnum] + "\n"
 	}
 	matBuf := []byte(materials)
 	if _, err := matView.Write(matBuf); err != nil {
@@ -93,7 +95,7 @@ func printInventory(log *CmdrLog, g *gocui.Gui) error {
 				data = data + v.Name + "\t x " + strconv.Itoa(v.Qty) + "\n"}
 		}
 	} else {
-		data = EDSMErrors[log.Data.Msgnum] + "\n"
+		data = EDSMErrorsG[log.Data.Msgnum] + "\n"
 	}
 	if _, err := dataView.Write([]byte(data)); err != nil {
 		return err
@@ -117,10 +119,31 @@ func printRank(rank CmdrRankLog, g *gocui.Gui) error {
 			rank.Verbose.Explore, rank.Progress.Explore,
 			rank.Verbose.Combat, rank.Progress.Combat)
 	} else {
-		out = fmt.Sprintf("%s", EDSMErrors[rank.Msgnum - 1])
+		out = fmt.Sprintf("%s", EDSMErrorsG[rank.Msgnum - 1])
 	}
 	if _, err := view.Write([]byte(out)); err != nil {
 		return err
 	}
 	return nil
+}
+
+func printCmdrList(view *gocui.View) {
+	view.Clear()
+	var cmdrArr []string
+	for k := range CmdrMapG {
+		cmdrArr = append(cmdrArr, k)
+	}
+	sort.Strings(cmdrArr)
+	var cmdrStr string
+	for e := range cmdrArr {
+		cmdrStr = cmdrStr + cmdrArr[e] + "\n"
+	}
+	_, err := view.Write([]byte(cmdrStr))
+	if err != nil {
+		log.Panicln(err)
+	}
+	_, err = view.Write([]byte("NEW_CMDR"))
+	if err != nil {
+		log.Panicln(err)
+	}
 }

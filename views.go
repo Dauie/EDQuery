@@ -22,6 +22,10 @@ func creditView(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
+		view.BgColor = gocui.ColorBlack
+		view.FgColor =  gocui.ColorYellow
+		view.SelBgColor =  gocui.ColorBlack
+		view.SelFgColor = gocui.ColorYellow
 		view.Frame = true
 		view.Title = "Credits"
 	}
@@ -38,6 +42,10 @@ func flightLogView(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
+		view.BgColor = gocui.ColorBlack
+		view.FgColor =  gocui.ColorYellow
+		view.SelBgColor =  gocui.ColorYellow
+		view.SelFgColor = gocui.ColorBlack
 		view.Wrap = true
 		view.Highlight = true
 		view.Frame = true
@@ -64,6 +72,10 @@ func inventoryView(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
+		materialsView.BgColor = gocui.ColorBlack
+		materialsView.FgColor =  gocui.ColorYellow
+		materialsView.SelBgColor =  gocui.ColorYellow
+		materialsView.SelFgColor = gocui.ColorBlack
 		materialsView.Wrap = true
 		materialsView.Highlight = true
 		materialsView.Frame = true
@@ -74,6 +86,10 @@ func inventoryView(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
+		dataView.BgColor = gocui.ColorBlack
+		dataView.FgColor = gocui.ColorYellow
+		dataView.SelBgColor =  gocui.ColorYellow
+		dataView.SelFgColor = gocui.ColorBlack
 		dataView.Wrap = true
 		dataView.Highlight = true
 		dataView.Frame = true
@@ -92,6 +108,10 @@ func rankView(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
+		view.BgColor = gocui.ColorBlack
+		view.FgColor = gocui.ColorYellow
+		view.SelBgColor =  gocui.ColorYellow
+		view.SelFgColor = gocui.ColorBlack
 		view.Frame = true
 		view.Wrap = true
 		view.Title = "Rank"
@@ -112,21 +132,15 @@ func sideView(g *gocui.Gui) error {
 		view.Frame = true
 		view.Title = "CMDRs"
 		view.Highlight = true
-		view.SelBgColor = gocui.ColorGreen
+		view.BgColor = gocui.ColorBlack
+		view.FgColor = gocui.ColorYellow
+		view.SelBgColor =  gocui.ColorYellow
 		view.SelFgColor = gocui.ColorBlack
-
-		var cmdrList string
-		for k := range CmdrMap {
-			cmdrList = cmdrList + k + "\n"
-		}
-		_, err = view.Write([]byte(cmdrList))
-		if err != nil {
-			return err
-		}
 		if _, err := g.SetCurrentView("side"); err != nil {
 			return err
 		}
 	}
+	printCmdrList(view)
 	return nil
 }
 

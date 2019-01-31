@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -14,43 +15,51 @@ import (
 	"github.com/jroimartin/gocui"
 )
 
-const versionNum = "1/"
+const EdsmApiVersionNum = "1/"
 
-/* I literally dont care. */
-const apiKey = "15a77f8df4b47582347aa83bb29f4245335a334a"
+const EdsmBaseURL = "https://www.edsm.net/"
 
-const baseURL = "https://www.edsm.net/"
+const CmdrEndpointG = EdsmBaseURL + "api-commander-v" + EdsmApiVersionNum
 
-const cmdrEndpoint = baseURL + "api-commander-v" + versionNum
+const SysEndpointG = EdsmBaseURL + "api-system-v" + EdsmApiVersionNum
 
-const sysEndpoint = baseURL + "api-system-v" + versionNum
+const LogEndpointG = EdsmBaseURL + "api-logs-v" + EdsmApiVersionNum
 
-const logEndpoint = baseURL + "api-logs-v" + versionNum
+var ClientG http.Client
 
-var Client http.Client
+var CmdrListPathG string
 
-var CmdrListPath string
+var AppDataPathG string
 
-var AppDataPath string
+var CmdrMapG = map[string]string{}
 
-var CmdrMap = map[string]string{}
-
-var EDSMErrors = map[int]string {
-	201: "Missing CMDR/API key",
-	203: "Commander not found",
-	204: "Item type not available",
-	208: "No credits stored",
-	207: "No rank stored",
+/*
+** common error responses from edsm.net
+*/
+var EDSMErrorsG = map[int]string {
+	201: "missing cmdr/api key",
+	203: "commander not found",
+	204: "item type not available",
+	208: "no credits stored",
+	207: "no rank stored",
 }
 
-func makeEDSMRequest(request string, store interface{}) error {
+/*
+** makeAPIRequest
+** @params:
+**		request - the full request url
+**		store - a structure mocking the json payload you expect from the response.
+** @function: pass any api request, and the appropriate structure to hold the
+**            the response and the deed will be done.
+*/
+func makeAPIRequest(request string, store interface{}) error {
 	req, err := http.NewRequest("GET", request, nil)
 	if err != nil {
 		log.Panicln("Error creating request", err)
 	}
-	resp, err := Client.Do(req)
+	resp, err := ClientG.Do(req)
 	if err != nil {
-		log.Panicln("Error making commander info request", err)
+		log.Panicln("Error making API request\n" + request + "\n", err)
 	}
 	data, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -63,39 +72,73 @@ func makeEDSMRequest(request string, store interface{}) error {
 	return nil
 }
 
+/*
+** openCmdrListFile
+** @params: none
+** @function: opens ~/.cmdr/cmdrlist for saving
+*/
+func openCmdrListFile() (CmdrListFd *os.File) {
+	CmdrListFd, err := os.OpenFile(CmdrListPathG, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	if err == io.EOF {
+		return nil
+	} else if err != nil {
+		log.Panicln(err)
+	}
+	return CmdrListFd
+}
+
+/*
+** getTrimmedLineFromCursor
+** @params: v - the view you want the line from
+** @function: retrieves the string the cursor is currently on and removes whitespace.
+*/
+func getTrimmedLineFromCursor(v *gocui.View) string {
+	var l string
+	var err error
+
+	_, cy := v.Cursor()
+	if l, err = v.Line(cy); err != nil {
+		l = ""
+	}
+	return strings.TrimSpace(l)
+}
+
+/* initAppdata
+** @param: none
+** @function: opens a file with saved cmdr/api pairs, and reads them into a map
+*/
 func initAppdata() error {
 	homePath, ok := os.LookupEnv("HOME")
 	if !ok {
 		return errors.New("HOME env variable not set")
 	}
-	AppDataPath = homePath + "/.cmdr"
-	CmdrListPath = AppDataPath + "/cmdrlist"
-	_, err := os.Stat(AppDataPath)
+	AppDataPathG = homePath + "/.cmdr"
+	CmdrListPathG = AppDataPathG + "/cmdrlist"
+	_, err := os.Stat(AppDataPathG)
 	if os.IsNotExist(err) {
-		err = os.MkdirAll(AppDataPath, 0755)
+		err = os.MkdirAll(AppDataPathG, 0755)
 		if err != nil {
 			log.Fatalln(err)
 		}
 	}
-	file, _ := os.Open(CmdrListPath)
+	file, _ := os.Open(CmdrListPathG)
 	fscanner := bufio.NewScanner(file)
 	for fscanner.Scan() {
 		keyVal := strings.Split(fscanner.Text(), " ")
 		if len(keyVal) == 1 {
-			CmdrMap[keyVal[0]] = "No API key"
+			CmdrMapG[keyVal[0]] = "API_KEY_MISSING"
 		} else {
-			CmdrMap[keyVal[0]] = keyVal[1]
+			CmdrMapG[keyVal[0]] = keyVal[1]
 		}
-	}
-	if err := fscanner.Err(); err != nil {
-		log.Panicln(err)
-	}
-	if err != nil {
-		log.Panicln(err)
 	}
 	return nil
 }
 
+/*
+** initGui
+** @param: none
+** @function: initialize our gocui Gui and set global attributes
+*/
 func initGui() (*gocui.Gui, error) {
 	g, err := gocui.NewGui(gocui.OutputNormal)
 	if err != nil {
@@ -108,10 +151,9 @@ func initGui() (*gocui.Gui, error) {
 
 func main() {
 
-	Client = http.Client {
+	ClientG = http.Client {
 		Timeout: time.Second * 10,
 	}
-
 	if err := initAppdata(); err != nil {
 		log.Fatalln("Error initializing application data.", err)
 	}
