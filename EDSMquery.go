@@ -2,10 +2,8 @@ package main
 
 import (
 	"bufio"
-	"encoding/json"
 	"errors"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
@@ -42,34 +40,6 @@ var EDSMErrorsG = map[int]string {
 	204: "item type not available",
 	208: "no credits stored",
 	207: "no rank stored",
-}
-
-/*
-** makeAPIRequest
-** @params:
-**		request - the full request url
-**		store - a structure mocking the json payload you expect from the response.
-** @function: pass any api request, and the appropriate structure to hold the
-**            the response and the deed will be done.
-*/
-func makeAPIRequest(request string, store interface{}) error {
-	req, err := http.NewRequest("GET", request, nil)
-	if err != nil {
-		log.Panicln("Error creating request", err)
-	}
-	resp, err := ClientG.Do(req)
-	if err != nil {
-		log.Panicln("Error making API request\n" + request + "\n", err)
-	}
-	data, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Panicln("ioutil.ReadAll()", err)
-	}
-	err = json.Unmarshal(data, store)
-	if err != nil {
-		log.Panicln("json.Unmarshal()", err)
-	}
-	return nil
 }
 
 /*

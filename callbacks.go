@@ -14,7 +14,6 @@ var (
 	EditViewInxG = 0
 )
 
-
 func keybindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("", gocui.KeyArrowUp, gocui.ModNone, cursorUp); err != nil {
 		log.Panicln(err)
@@ -119,27 +118,27 @@ func editCmdr(g *gocui.Gui, v *gocui.View) error {
 func saveCmdrEdit(g *gocui.Gui, v *gocui.View) error {
 	editCmdrView, err := g.SetCurrentView("editCmdr")
 	if err != nil {
-		log.Panicln(err)
+		return err
 	}
 	eName := strings.ToUpper(strings.TrimSpace(editCmdrView.Buffer()))
 	editApiView, err := g.SetCurrentView("editApi")
 	if err != nil {
-		log.Panicln(err)
+		return err
 	}
 	eApi := strings.TrimSpace(editApiView.Buffer())
 	delete(CmdrMapG, CmdrToEditG)
 	CmdrMapG[eName] = eApi
 	if err := g.DeleteView("editCmdr"); err != nil {
-		log.Panicln(err)
+		return err
 	}
 	if err := g.DeleteView("editApi"); err != nil {
-		log.Panicln(err)
+		return err
 	}
 	if _, err := g.SetCurrentView("side"); err != nil {
-		log.Panicln(err)
+		return err
 	}
 	if err := sideView(g); err != nil {
-		log.Panicln(err)
+		return err
 	}
 	return nil
 }
@@ -172,21 +171,19 @@ func queryCmdr(g *gocui.Gui, v *gocui.View) error {
 	_, cy := v.Cursor()
 	cmdr.Name, err = v.Line(cy)
 	if err != nil {
-		log.Panicln(err)
+		return err
 	}
 	if err := cmdrRankRequest(cmdr.Name, &cmdr.Rank, g); err != nil {
-		log.Panicln(err)
+		return err
 	}
 	if err := cmdrCreditRequest(cmdr.Name, &cmdr.Credits, g); err != nil {
-		log.Panicln(err)
+		return err
 	}
-
 	if err := cmdrFlightLogRequest(cmdr.Name, &cmdr.FlightLog, g); err != nil {
-		log.Panicln(err)
+		return err
 	}
-
 	if err := cmdrInventoryRequest(cmdr.Name, &cmdr, g); err != nil {
-		log.Panicln(err)
+		return err
 	}
 	_, _ = g.SetCurrentView("side")
 	return nil
@@ -204,14 +201,14 @@ func saveSide(g *gocui.Gui, v *gocui.View) error {
 	defer func() {
 		err := cmdrListFd.Close()
 		if err != nil {
-			log.Fatalln(err)
+			log.Panicln(err)
 		}
 	}()
 	for k, v := range CmdrMapG {
 		out = out + k + " " + v + "\n"
 	}
 	if _, err := cmdrListFd.Write([]byte(out)); err != nil {
-		log.Panicln(err)
+		return err
 	}
 	return nil
 }
